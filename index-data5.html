@@ -1,0 +1,214 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>arcgis</title>
+  <meta http-equiv="Content-Type" content="text/html; charset=utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no"/>
+  <link rel="stylesheet" href="https://js.arcgis.com/3.28/esri/css/esri.css">
+  <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css"/>
+  <link href="./vendor/ncam/PopupExtended.css" rel="stylesheet" />
+  <style>
+    html, body, #mapId {
+      height: 100%;
+      width: 100%;
+      box-sizing: content-box;
+    }
+    /*放大缩小按钮*/
+    #mapId_zoom_slider {
+      background: url(img/bg2.png) 0 0 no-repeat !important;
+      width: 32px !important;
+      background-size: 100% 100% !important;
+      border: none !important;
+      color: rgb(106,227,239) !important;
+      border-radius: 0 !important;
+      top: 15px !important;
+      left: 15px !important;
+    }
+    .esriSimpleSliderVertical .esriSimpleSliderIncrementButton {
+      border-radius: 0 !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      font-family: -webkit-pictograph !important;
+      font-size: 28px !important;
+    }
+    .esriSimpleSliderVertical .esriSimpleSliderDecrementButton {
+      border-radius: 0 !important;
+      height: 32px !important;
+      line-height: 32px !important;
+      font-family: -webkit-pictograph !important;
+      font-size: 28px !important;
+    }
+    .esriSimpleSliderVertical .esriSimpleSliderIncrementButton:hover, .esriSimpleSliderVertical .esriSimpleSliderDecrementButton:hover{
+      color: rgb(106,227,239) !important;
+      background: initial !important;
+    }
+    .esriSimpleSlider div {
+      width: 100% !important;
+    }
+    .buttonRight{
+      position: absolute;
+      z-index: 999;
+
+    }
+    .hzLine{
+      border: none;
+      border-top: 1px solid #333333;
+      margin-top: 6px;
+      margin-bottom: 6px;
+    }
+    .popupTitle{
+      font-size: 18px;
+    }
+    .popupContent{
+      font-size: 15px;
+    }
+    .esriPopup.light .titleButton.close, .esriPopup.dark .titleButton.close {
+      margin-top: -5px;
+    }
+    .esriPopup.light .titleButton.maximize, .esriPopup.dark .titleButton.maximize {
+      display:none;
+    }
+  </style>
+</head>
+<body  id="claro">
+<div id="mapId"></div>
+<!-- ArcGIS API for JavaScript library references -->
+<script>
+  var dojoConfig = {
+    parseOnLoad: false,
+    async: true,
+    tlmSiblingOfDojo: false,
+    packages: [{
+      name: "ncam",
+      location: location.pathname.replace(/\/[^/]+$/, '') + "ncam"
+    }]
+  };
+</script>
+<script src="https://js.arcgis.com/3.28/"></script>
+<!-- Terraformer reference -->
+<script src="./vendor/terraformer/terraformer.min.js"></script>
+<script src="./vendor/jquery.js"></script>
+<script src="./vendor/terraformer-arcgis-parser/terraformer-arcgis-parser.min.js"></script>
+<script>
+  var map
+  var view
+  var json = {}
+  var mapData = []
+  require(["esri/map",
+      "dojo/on",
+      "dojo/dom",
+      "esri/layers/ArcGISDynamicMapServiceLayer",
+      'esri/geometry/Extent',
+      "dojo/domReady!"],
+    function (Map, on, dom, ArcGISDynamicMapServiceLayer, Extent) {
+      map = new Map("mapId", {
+        //basemap: "streets",
+        logo:false,
+        showAttribution: false
+      })
+      // 添加底图
+      var imageLayer = new ArcGISDynamicMapServiceLayer("https://map.geoq.cn/ArcGIS/rest/services/ChinaOnlineStreetPurplishBlue/MapServer", {id:"imageLayer"});
+      map.addLayer(imageLayer)
+      // 添加范围
+      var extent = new Extent({
+        xmax: 116.720392,
+        xmin: 116.102933,
+        ymax: 40.011797,
+        ymin: 39.809015,
+        spatialReference: { wkid: 4326 }
+      })
+      map.setExtent(extent)
+    });
+    function addGeoJsonToMap(data){
+      require(["esri/map",
+          "./src/geojsonlayer.js",
+          "esri/geometry/Point",
+          "esri/SpatialReference",
+          "dojo/on",
+          "dojo/dom",
+          "dojo/domReady!"],
+        function (Map, geojsonlayer, Point, SpatialReference,on, dom) {
+          // Create the layer
+          var geoJsonLayer = new geojsonlayer({
+            baseMap:map,
+            data: data,
+            onLayerLoaded:function(layer){
+              showAllPopup(layer);
+            }
+          });
+          // Add to map
+          geoJsonLayer.dataType="geojson";
+          map.addLayer(geoJsonLayer);
+          //show all popups
+          function showAllPopup(layer){
+            if(layer.graphics[0].geometry.type=="point"){
+              layer.graphics.forEach(function(item){
+                var loc = map.toScreen(item.geometry);
+                map.infoWindow.setFeatures([item]);
+                map.infoWindow.show(loc);
+              })
+            }
+
+          }
+        });
+    }
+
+    getMapData('2019-01-01 00:00:00', '2020-10-01 00:00:00')
+    function getMapData (strTime, endTime){
+      var start_time = ""
+      if (strTime !== undefined) {
+        start_time = String(strTime)
+      } else {
+        start_time = ""
+      }
+      var end_time = ""
+      if (endTime !== undefined) {
+        end_time = String(endTime)
+      } else {
+        end_time = ""
+      }
+      $.ajax({
+        url: 'http://192.168.1.111:8080/api/hdpi/get-location?start_time='+start_time+'&end_time='+end_time,
+        type: 'get',
+        dataType:"json",
+        success: function(data) {
+          if (data.errcode === 200) {
+            mapData = data.data
+            getFeatures(mapData)
+          }
+        },
+        error: function (jqXHR) {
+          console.log(jqXHR)
+        }
+      })
+    }
+    function getFeatures (list) {
+      var gras = []
+      var json = {}
+      var tempJson = {}
+      for (var i = 0; i < list.length; i++) {
+        tempJson = {
+          "type":"Feature",
+          "properties":{
+            "Id": list[i].id,
+            "name": list[i].id,
+            "lon": list[i].lon,
+            "lat": list[i].lat
+          },
+          "geometry":{
+            "type":"Point",
+            "coordinates":[Number(list[i].lon),Number(list[i].lat)]
+          }
+        }
+        gras.push(tempJson)
+      }
+      json.features = gras
+      json.type = 'FeatureCollection'
+      // 执行渲染点和弹窗方法
+      addGeoJsonToMap(json)
+    }
+</script>
+</body>
+</html>
