@@ -8,6 +8,7 @@
   <meta name="viewport" content="initial-scale=1,maximum-scale=1,user-scalable=no"/>
   <link rel="stylesheet" href="https://js.arcgis.com/3.28/esri/css/esri.css">
   <link rel="stylesheet" href="//netdna.bootstrapcdn.com/bootstrap/3.1.1/css/bootstrap.min.css"/>
+  <link rel="stylesheet" href="css/index.css">
   <link href="./vendor/ncam/PopupExtended.css" rel="stylesheet" />
   <style>
     html, body, #mapId {
@@ -47,6 +48,9 @@
     .esriSimpleSlider div {
       width: 100% !important;
     }
+    .esriSimpleSliderVertical .esriSimpleSliderIncrementButton {
+      border-bottom: solid 1px rgba(106,227,239, 0.3) !important;
+    }
     .buttonRight{
       position: absolute;
       z-index: 999;
@@ -55,20 +59,45 @@
     .hzLine{
       border: none;
       border-top: 1px solid #333333;
-      margin-top: 6px;
-      margin-bottom: 6px;
+      margin-top: 5px;
+      margin-bottom: 5px;
     }
     .popupTitle{
-      font-size: 18px;
+      font-size: 16px;
     }
     .popupContent{
-      font-size: 15px;
+      font-size: 14px;
     }
     .esriPopup.light .titleButton.close, .esriPopup.dark .titleButton.close {
-      margin-top: -5px;
+      margin-top: -7px;
     }
     .esriPopup.light .titleButton.maximize, .esriPopup.dark .titleButton.maximize {
       display:none;
+    }
+    .esriPopup .sizer {
+      width: 180px !important;
+    }
+    .esriPopup.light .titlePane {
+      padding: 5px 10px 20px 10px !important;
+    }
+    .esriPopup.light .titlePane .title {
+      position: absolute !important;
+      left: 25px !important;
+    }
+    .esriPopup.light .titleButton.prev, .esriPopup.dark .titleButton.prev {
+      left: 0px !important;
+      top: 5px !important;
+    }
+    .esriPopup.light .titleButton.next, .esriPopup.dark .titleButton.next {
+      left: 65px !important;
+      top: 5px !important;
+    }
+    .esriPopup.light .actionsPane {
+      display: none !important;
+      padding: 0 !important;
+    }
+    .esriPopup.light .contentPane {
+      padding: 0 5px 5px !important;
     }
   </style>
 </head>
@@ -92,6 +121,9 @@
 <script src="./vendor/jquery.js"></script>
 <script src="./vendor/terraformer-arcgis-parser/terraformer-arcgis-parser.min.js"></script>
 <script>
+  // 接口地址
+  const requestUrl = 'http://10.11.9.52:8093/dzj/api'
+  //const requestUrl = 'http://192.168.1.50:8980/dzj/api'
   var map
   var view
   var json = {}
@@ -104,7 +136,6 @@
       "dojo/domReady!"],
     function (Map, on, dom, ArcGISDynamicMapServiceLayer, Extent) {
       map = new Map("mapId", {
-        //basemap: "streets",
         logo:false,
         showAttribution: false
       })
@@ -121,94 +152,154 @@
       })
       map.setExtent(extent)
     });
-    function addGeoJsonToMap(data){
-      require(["esri/map",
-          "./src/geojsonlayer.js",
-          "esri/geometry/Point",
-          "esri/SpatialReference",
-          "dojo/on",
-          "dojo/dom",
-          "dojo/domReady!"],
-        function (Map, geojsonlayer, Point, SpatialReference,on, dom) {
-          // Create the layer
-          var geoJsonLayer = new geojsonlayer({
-            baseMap:map,
-            data: data,
-            onLayerLoaded:function(layer){
-              showAllPopup(layer);
-            }
-          });
-          // Add to map
-          geoJsonLayer.dataType="geojson";
-          map.addLayer(geoJsonLayer);
-          //show all popups
-          function showAllPopup(layer){
-            if(layer.graphics[0].geometry.type=="point"){
-              layer.graphics.forEach(function(item){
-                var loc = map.toScreen(item.geometry);
-                map.infoWindow.setFeatures([item]);
-                map.infoWindow.show(loc);
-              })
-            }
-
+  function addGeoJsonToMap(data){
+    require(["esri/map",
+        "./src/geojsonlayer.js",
+        "esri/geometry/Point",
+        "esri/SpatialReference",
+        "dojo/on",
+        "dojo/dom",
+        "dojo/domReady!"],
+      function (Map, geojsonlayer, Point, SpatialReference,on, dom) {
+        // 清空所有弹窗
+        if (map.infoWindow && map.infoWindow.openPopups && map.infoWindow.openPopups.length > 0) {
+          for (var i = 0, len = map.infoWindow.openPopups.length; i < len; i++) {
+            map.infoWindow.openPopups[i].hide();
+            i--;
+            len--;
+          }
+        }
+        // 清空已存在的点图层
+        let tempLayer = map.getLayer('pointLayer')
+        if (tempLayer) {
+          map.removeLayer(tempLayer)
+        }
+        // Create the layer
+        var geoJsonLayer = new geojsonlayer({
+          baseMap:map,
+          data: data,
+          id: 'pointLayer',
+          onLayerLoaded:function(layer){
+            showAllPopup(layer);
           }
         });
-    }
+        // Add to map
+        geoJsonLayer.dataType="geojson";
+        map.addLayer(geoJsonLayer);
+        if (geoJsonLayer.extent !== null) {
+          geoJsonLayer.on("load",function(){
+            map.setExtent(geoJsonLayer.extent)
+          })
+        }
+        //show all popups
+        function showAllPopup(layer){
+          if(layer.graphics[0].geometry.type=="point"){
+            layer.graphics.forEach(function(item){
+              var loc = map.toScreen(item.geometry);
+              map.infoWindow.setFeatures([item]);
+              map.infoWindow.show(loc);
+            })
+          }
 
-    getMapData('2019-01-01 00:00:00', '2020-10-01 00:00:00')
-    function getMapData (strTime, endTime){
-      var start_time = ""
-      if (strTime !== undefined) {
-        start_time = String(strTime)
-      } else {
-        start_time = ""
-      }
-      var end_time = ""
-      if (endTime !== undefined) {
-        end_time = String(endTime)
-      } else {
-        end_time = ""
-      }
-      $.ajax({
-        url: 'http://192.168.1.111:8080/api/hdpi/get-location?start_time='+start_time+'&end_time='+end_time,
-        type: 'get',
-        dataType:"json",
-        success: function(data) {
-          if (data.errcode === 200) {
+        }
+      });
+  }
+
+  /*********************  此处临时写，需要清博调用改方法  *****************************/
+  getMapData('2019-01-01 00:00:00', '2020-10-01 00:00:00')
+
+
+  function getMapData (strTime, endTime){
+    var start_time = ""
+    if (strTime !== undefined) {
+      start_time = String(strTime)
+    } else {
+      start_time = ""
+    }
+    var end_time = ""
+    if (endTime !== undefined) {
+      end_time = String(endTime)
+    } else {
+      end_time = ""
+    }
+    $.ajax({
+      url: requestUrl + '/yjtMessagemajor/findMesMajorByTime',
+      type: 'post',
+      contentType: "application/json",
+      data: JSON.stringify({
+        endTime: end_time,
+        startTime: start_time
+      }),
+      dataType:"json",
+      success: function(data) {
+        if (data.status === 1000) {
+          if (data.data.length > 0) {
             mapData = data.data
             getFeatures(mapData)
+          } else {
+            if (map.infoWindow && map.infoWindow.openPopups && map.infoWindow.openPopups.length > 0) {
+              for (var i = 0, len = map.infoWindow.openPopups.length; i < len; i++) {
+                map.infoWindow.openPopups[i].hide();
+                i--;
+                len--;
+              }
+            }
+            let tempLayer = map.getLayer('pointLayer')
+            if (tempLayer) {
+              map.removeLayer(tempLayer)
+            }
           }
-        },
-        error: function (jqXHR) {
-          console.log(jqXHR)
         }
-      })
-    }
-    function getFeatures (list) {
-      var gras = []
-      var json = {}
-      var tempJson = {}
-      for (var i = 0; i < list.length; i++) {
+      },
+      error: function (jqXHR) {
+        console.log(jqXHR)
+      }
+    })
+  }
+  function getFeatures (list) {
+    var gras = []
+    var json = {}
+    var tempJson = {}
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].messageattachList[0].attachUrl !== null && list[i].messageattachList[0].attachUrl !== '' && list[i].messageattachList[0].attachUrl.indexOf("null") === -1) {
         tempJson = {
           "type":"Feature",
           "properties":{
             "Id": list[i].id,
-            "name": list[i].id,
-            "lon": list[i].lon,
-            "lat": list[i].lat
+            "name": list[i].name,
+            "lon": list[i].gpsLon,
+            "lat": list[i].gpsLat,
+            "remark": list[i].remark,
+            "img": list[i].messageattachList[0].attachUrl
           },
           "geometry":{
             "type":"Point",
-            "coordinates":[Number(list[i].lon),Number(list[i].lat)]
+            "coordinates":[Number(list[i].gpsLon),Number(list[i].gpsLat)]
           }
         }
-        gras.push(tempJson)
+      } else {
+        tempJson = {
+          "type":"Feature",
+          "properties":{
+            "Id": list[i].id,
+            "name": list[i].name,
+            "lon": list[i].gpsLon,
+            "lat": list[i].gpsLat,
+            "remark": list[i].remark
+          },
+          "geometry":{
+            "type":"Point",
+            "coordinates":[Number(list[i].gpsLon),Number(list[i].gpsLat)]
+          }
+        }
       }
-      json.features = gras
-      json.type = 'FeatureCollection'
-      // 执行渲染点和弹窗方法
-      addGeoJsonToMap(json)
+      gras.push(tempJson)
     }
+    json.features = gras
+    json.type = 'FeatureCollection'
+    // 执行渲染点和弹窗方法
+    addGeoJsonToMap(json)
+  }
 </script>
 </body>
 </html>
